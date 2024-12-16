@@ -16,7 +16,7 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
 
     const [time, setTime] = useState(0);
     const [isRunning, setIsRunning] = useState(false);
-    const [points, setPoints] = useState(pointObject?.points || 0);
+    const [points, setPoints] = useState(pointObject?.points ?? 0);
     const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [pin, setPin] = useState('');
@@ -30,8 +30,8 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
 
 
     useEffect(() => {
-        if (pointObject?.points !== points) {
-            setPoints(pointObject?.points || 0);
+        if (typeof pointObject?.points === 'number') {
+            setPoints(pointObject.points);
         }
     }, [pointObject]);
 

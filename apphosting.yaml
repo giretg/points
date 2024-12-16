@@ -1,0 +1,41 @@
+# Settings for Backend (on Cloud Run).
+runConfig:
+  minInstances: 0
+  # maxInstances: 100
+  # concurrency: 80
+  # cpu: 1
+  # memoryMiB: 512
+
+env:
+  # Clerk környezeti változók
+  - variable: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+    value: "pk_test_c2Vuc2libGUtdGVycmFwaW4tOTIuY2xlcmsuYWNjb3VudHMuZGV2JA"
+  - variable: CLERK_SECRET_KEY
+    value: "sk_test_DuQKeFEHMpVWmLMUPJTkn9iB8O2Us8T2qD1zeivMQ7"
+  - variable: NEXT_PUBLIC_CLERK_SIGN_IN_URL
+    value: "/sign-in"
+  - variable: NEXT_PUBLIC_CLERK_SIGN_UP_URL
+    value: "/sign-up"
+  
+  # Database URL
+  - variable: DATABASE_URL
+    value: "mongodb+srv://gergelygiret:Ks6f9uCM2qgrxUnB@cluster-payp.qfsw9.mongodb.net/pointer?retryWrites=true&w=majority&appName=Cluster-payp"
+  
+  # Firebase környezeti változók
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyBDj4yjfJYm_MB0McQ0QMOkts3YbtN8jlE"
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "pay-advisor-ehtkad.firebaseapp.com"
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "pay-advisor-ehtkad"
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "pay-advisor-ehtkad.appspot.com"
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "your-messaging-sender-id"
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "565156941095"
+  - variable: NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+    value: "1:565156941095:web:447fcc81c4e83828a8ad02"
+  
+
+
