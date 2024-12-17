@@ -183,6 +183,10 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
         setPointsToAdd(0);
     };
 
+    useEffect(() => {
+        // Itt használhatók a window, document stb. API-k
+    }, [])
+
     return (
         <div className="min-h-screen flex flex-col bg-gray-100 p-4" >
             <main className="flex-1 flex flex-col items-center" >
