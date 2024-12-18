@@ -1,22 +1,15 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose from "mongoose";
 
-export interface IPoints extends Document {
-  points: number;
-  createdAt: Date;
+
+const pointsSchema = new mongoose.Schema({
+    points: { type: Number, required: true },
+    childid: { type: String, required: false },
+    secondstoaccumulate: { type: Number, required: true },
+    secondstospend: { type: Number, required: true },
+}, { timestamps: true });
+
+if(mongoose.models && mongoose.models['points']){
+    delete mongoose.models['points']
 }
-
-const pointsSchema = new Schema<IPoints>({
-  points: {
-    type: Number,
-    required: true,
-    default: 0
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  }
-});
-
-const PointsModel = mongoose.models.Points || mongoose.model<IPoints>('Points', pointsSchema);
-
+const PointsModel = mongoose.model("points", pointsSchema);
 export default PointsModel;

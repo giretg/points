@@ -1,9 +1,7 @@
 'use server'
 
-
 import { connectMongoDb } from "@/lib/db";
 import PointsModel from "@/models/points-model";
-
 import { revalidatePath } from "next/cache";
 
 connectMongoDb();
@@ -14,18 +12,31 @@ interface Points {
     // további mezők a PointsModel alapján...
 }
 
-export const AddPoints = async (payload: number) => {
+export const AddPoints = async ({ pointsId, payload }: {
+    pointsId: string,
+    payload: EditPointsPayload
+}) => {
     console.log("Points server action called");
     try {
-        const newPoints = new PointsModel({ points: payload });
-        await newPoints.save();
+        const newPoints = new PointsModel({ 
+            points: payload.points,
+            childid: payload.childid,
+            secondstoaccumulate: payload.secondstoaccumulate,
+            secondstospend: payload.secondstospend
+        });
+        const savedPoints = await newPoints.save();
         
+        // Frissítjük az összes releváns útvonalat
+        revalidatePath('/');
+ 
+
         return {
             success: true,
-            message: 'Points added succesfully'
+            message: 'Points added successfully',
+            
         }
     } catch (e: unknown) {
-        console.log(e);
+        console.error(e);
         return {
             success: false,
             message: e instanceof Error ? e.message : 'Unknown error'
@@ -33,14 +44,22 @@ export const AddPoints = async (payload: number) => {
     }
 }
 
-export const EditPoints = async ({ pointsId, payload }:
-    {
-        pointsId: string,
-        payload: number
-    }) => {
+interface EditPointsPayload {
+    points: number;
+    childid: string;
+    secondstoaccumulate: number;
+    secondstospend: number;
+}
+
+export const EditPoints = async ({ pointsId, payload }: {
+    pointsId: string,
+    payload: EditPointsPayload
+}) => {
+
+    console.log("EditPoints server action called", payload);
     try {
-        await PointsModel.findByIdAndUpdate(pointsId, { points: payload });
-        revalidatePath('/admin/points')
+        await PointsModel.findByIdAndUpdate(pointsId, payload);
+        revalidatePath('/')
         return {
             success: true,
             message: 'Edit succesful'

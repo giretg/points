@@ -1,7 +1,7 @@
 'use client'
-import { AddPoints, EditPoints } from "@/server-actions/points";
+import { AddPoints, DeletePoints, EditPoints } from "@/server-actions/points";
 import { PointsType } from "../interfaces";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faStar, faGear } from '@fortawesome/free-solid-svg-icons';
 
@@ -11,12 +11,17 @@ interface PointsResponse {
     error?: string;
 }
 
-function MainScreen({ pointObject }: { pointObject?: PointsType }) {
-    console.log("Initial pointObject:", pointObject);
+const blinkingStarClass = "animate-pulse text-amber-300 text-lg";
+
+
+
+function MainScreen({ pointObjects = [] }: { pointObjects?: PointsType[] }) {
+    // Debug log eltávolítása vagy módosítása
+    // console.log("Initial pointObject:", pointObjects);
 
     const [time, setTime] = useState(0);
     const [isRunning, setIsRunning] = useState(false);
-    const [points, setPoints] = useState(pointObject?.points ?? 0);
+    //const [points, setPoints] = useState(pointObjects?.[0]?.points ?? 0);
     const [intervalId, setIntervalId] = useState<NodeJS.Timeout | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [pin, setPin] = useState('');
@@ -24,58 +29,139 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
     const [pointsToAdd, setPointsToAdd] = useState(0);
     const [isConsumingPoints, setIsConsumingPoints] = useState(false);
     const [consumedSeconds, setConsumedSeconds] = useState(0);
+    const [secondsPerPoint, setSecondsPerPoint] = useState(60);
+    const [secondsPerPointConsume, setSecondsPerPointConsume] = useState(60);
+    const [selectedPointObject, setSelectedPointObject] = useState<PointsType | undefined>(
+        pointObjects?.[0] || {
+            _id: '',
+            points: 0,
+            childid: '',
+            secondstoaccumulate: 60,
+            secondstospend: 60,
+            createdAt: '',
+            updatedAt: ''
+        }
+    );
 
-    console.log("point:", pointObject)
-  
+    const [localPointObjects, setLocalPointObjects] = useState<PointsType[]>(pointObjects);
+    const lastPointAddedAt = useRef(0);
+    const [newChildName, setNewChildName] = useState('');
+
+    useEffect(() => {
+        const initializePoints = async () => {
+            if (!pointObjects || pointObjects.length === 0) {
+                const newPointObject: PointsType = {
+                    _id: '',
+                    points: 0,
+                    childid: 'Új gyerek',
+                    secondstoaccumulate: 60,
+                    secondstospend: 60,
+                    createdAt: '',
+                    updatedAt: ''
+                };
+                setLocalPointObjects([newPointObject]);
+                setSelectedPointObject(newPointObject);
+                updatePoints(newPointObject);
+            }
+        };
+
+        initializePoints().catch(console.error);
+    }, []);
 
 
     useEffect(() => {
-        if (typeof pointObject?.points === 'number') {
-            setPoints(pointObject.points);
-        }
-    }, [pointObject]);
+        updatePoints(selectedPointObject);
+    }, [selectedPointObject?.points, selectedPointObject?.secondstoaccumulate, selectedPointObject?.secondstospend, selectedPointObject?.childid]);
+    // Points accumulation effect
 
-    const updatePoints = async (newPoints: number) => {
+
+    const updatePoints = async (pointObject: PointsType | undefined) => {
+        if (!pointObject) return;
+
+        pointObject.points = Math.round(pointObject.points);
+
         try {
-            let response: PointsResponse = { success: false };
-            const roundedPoints = Math.floor(newPoints);
+            let response: PointsResponse;
+            if (!pointObject._id || pointObject._id === '' || pointObject._id.startsWith('temp-')) {
+                response = await AddPoints({
+                    pointsId: '',
+                    payload: {
+                        points: pointObject.points,
+                        childid: pointObject.childid || '',
+                        secondstoaccumulate: pointObject.secondstoaccumulate || secondsPerPoint,
+                        secondstospend: pointObject.secondstospend || secondsPerPointConsume
+                    }
+                });
 
-            if (!pointObject) {
-                response = await AddPoints(roundedPoints);
-            } else if (pointObject) {
-                response = await EditPoints({ pointsId: pointObject?._id, payload: roundedPoints });
+                if (response.success && response.message && response.message !== 'Points added successfully') {
+                    const newId = response.message;
+                    setLocalPointObjects(prev =>
+                        prev.map(obj =>
+                            obj._id === pointObject._id ? { ...obj, _id: newId } : obj
+                        )
+                    );
+                    setSelectedPointObject(prev =>
+                        prev?._id === pointObject._id ? { ...prev, _id: newId } : prev
+                    );
+                }
+            } else {
+                response = await EditPoints({
+                    pointsId: pointObject._id,
+                    payload: {
+                        points: pointObject.points,
+                        childid: pointObject.childid,
+                        secondstoaccumulate: pointObject.secondstoaccumulate || secondsPerPoint,
+                        secondstospend: pointObject.secondstospend || secondsPerPointConsume
+                    }
+                });
             }
 
-            if (response.success) {
-                console.log(response.message);
-            }
             if (!response.success) {
-                console.log(response.error);
+                console.error("Error:", response.error);
             }
-
         } catch (error) {
             if (error instanceof Error) {
-                console.log(error.message);
+                console.error("Exception:", error.message);
             } else {
-                console.log('An unknown error occurred');
+                console.error('An unknown error occurred');
             }
         }
+    };
+
+    const deletePointObject = async (pointObject: PointsType) => {
+        await DeletePoints(pointObject._id);
+        setLocalPointObjects(prevObjects => prevObjects.filter(obj => obj._id !== pointObject._id));
+        setSelectedPointObject(pointObjects.length > 1 ? pointObjects[1] : undefined);
     };
 
     const startTimer = () => {
         if (!isRunning) {
             if (isConsumingPoints) {
-                // Start countdown from points * 60 seconds
-                setTime(points * 60);
+                setTime((Number(selectedPointObject?.points || 0)) * (selectedPointObject?.secondstospend || 60));
                 const id = setInterval(() => {
                     setTime((prevTime) => {
-                        if (prevTime <= 0) {
+                        const newTime = prevTime - 1;
+                        if (newTime <= 0) {
                             clearInterval(id);
                             setIsRunning(false);
                             setIntervalId(null);
                             return 0;
                         }
-                        return prevTime - 1;
+
+
+                        const secondsToSpend = Number(selectedPointObject?.secondstospend || 60);
+                        console.log("secondsToSpend:", secondsToSpend);
+                        console.log("newTime:", newTime);
+                        console.log("newTime % secondsToSpend:", newTime % secondsToSpend);
+                        if (newTime % secondsToSpend === 0 &&
+                            newTime !== lastPointAddedAt.current) {
+                            lastPointAddedAt.current = newTime;
+                            setSelectedPointObject(prev => prev ? {
+                                ...prev,
+                                points: Math.max(0, prev.points - 1)
+                            } : prev);
+                        }
+                        return newTime;
                     });
                     setConsumedSeconds(prev => prev + 1);
                 }, 1000);
@@ -84,12 +170,12 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
                 const id = setInterval(() => {
                     setTime(prevTime => {
                         const newTime = prevTime + 1;
-                        if (newTime % 60 === 0) {
-                            setPoints(prevPoints => {
-                                const newPoints = prevPoints + 1;
-                                updatePoints(newPoints);
-                                return newPoints;
-                            });
+
+                        const secondsToAccumulate = Number(selectedPointObject?.secondstoaccumulate || 60);
+                        if (newTime % secondsToAccumulate === 0 &&
+                            newTime !== lastPointAddedAt.current) {
+                            lastPointAddedAt.current = newTime;
+                            setSelectedPointObject(prev => prev ? { ...prev, points: prev.points + 1 } : prev);
                         }
                         return newTime;
                     });
@@ -114,19 +200,9 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
             setIntervalId(null);
         }
         setIsRunning(false);
-
         if (!isConsumingPoints) {
-            // Point earning mode
-            const newPoints = Math.floor(time / 60);
-            const totalPoints = points + newPoints;
-            updatePoints(totalPoints);
-        } else {
-            // Point consuming mode
-            const remainingPoints = Math.max(0, points - (consumedSeconds / 60));
-            updatePoints(remainingPoints);
+            setTime(0);
         }
-        setTime(0);
-        setConsumedSeconds(0);
     };
 
     const toggleMode = () => {
@@ -144,25 +220,15 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
     };
 
     // Calculate how many full and partial stars to show
-    const calculateStars = () => {
-        if (!isConsumingPoints || !isRunning) {
-            return { fullStars: Math.max(0, Math.floor(points)), partialStar: 0 };
-        }
 
-        const consumedPoints = consumedSeconds / 60;
-        const remainingPoints = Math.max(0, points - consumedPoints);
-        const fullStars = Math.floor(remainingPoints);
-        const partialStar = remainingPoints % 1;
 
-        return { fullStars, partialStar };
-    };
-
-    const { fullStars, partialStar } = calculateStars();
 
     const handlePointsModification = async (amount: number) => {
-        const newTotal = points + amount;
+        const newTotal = (Number(selectedPointObject?.points || 0)) + amount;
         if (newTotal >= 0) {
-            await updatePoints(newTotal);
+
+            setSelectedPointObject(prev => prev ? { ...prev, points: newTotal } : prev);
+
         }
     };
 
@@ -183,13 +249,63 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
         setPointsToAdd(0);
     };
 
-    useEffect(() => {
-        // Itt használhatók a window, document stb. API-k
-    }, [])
+
+
+
+
+
+    const handleAddPointObject = (value: string) => {
+        const tempId = `temp-${Date.now()}`; // Ideiglenes egyedi azonosító
+        const newPointObject: PointsType = {
+            _id: tempId, // Az ideiglenes ID használata
+            points: 0,
+            childid: value,
+            secondstoaccumulate: 60,
+            secondstospend: 60,
+            createdAt: '',
+            updatedAt: ''
+        };
+
+        setLocalPointObjects(prev => [...prev, newPointObject]);
+        setSelectedPointObject(newPointObject);
+    };
+
+    const handleChangePointObject = async (childId: string) => {
+        if (!selectedPointObject) {
+            console.error("No selected point object to update.");
+            return;
+        }
+
+        // Először csak a lokális state-et frissítjük
+        const updatedPointObject = {
+            ...selectedPointObject,
+            childid: childId
+        };
+
+        setLocalPointObjects(prevObjects =>
+            prevObjects.map(obj =>
+                obj._id === selectedPointObject._id ? updatedPointObject : obj
+            )
+        );
+        setSelectedPointObject(updatedPointObject);
+    };
+
+    const handleDeletePointObject = () => {
+
+        if (selectedPointObject) {
+            deletePointObject(selectedPointObject);
+        }
+
+        setSelectedPointObject(pointObjects.length > 1 ? pointObjects[1] : undefined);
+    };
+
+
 
     return (
         <div className="min-h-screen flex flex-col bg-gray-100 p-4" >
+
             <main className="flex-1 flex flex-col items-center" >
+
                 <div className="bg-white p-8 rounded-lg shadow-lg text-center relative w-full max-w-md" >
                     <button
                         onClick={() => setIsModalOpen(true)}
@@ -197,8 +313,10 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
                     >
                         <FontAwesomeIcon icon={faGear} className="text-xl" />
                     </button>
-
-                    < div className="text-6xl font-bold text-black mb-8" > {formatTime(time)} </div>
+                    <label className="text-2xl font-bold text-black mb-8" >
+                        {selectedPointObject?.childid}
+                    </label>
+                    < div className="text-4xl font-bold text-black mb-8" > {formatTime(time)} </div>
 
                     < div className="space-x-4 mb-4" >
                         <button
@@ -217,48 +335,69 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
                             Stop
                         </button>
                     </div>
+                    <div className="flex items-center justify-center gap-2 my-4">
 
-                    < button
-                        onClick={toggleMode}
-                        disabled={isRunning}
-                        className={`px-4 py-2 rounded-full font-semibold ${isConsumingPoints
-                            ? 'bg-purple-500 hover:bg-purple-600 text-white'
-                            : 'bg-blue-500 hover:bg-blue-600 text-white'
-                            } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                
+                    <div
+                        onClick={() => !isRunning && toggleMode()}
+                        className={`relative w-14 h-7 rounded-full cursor-pointer transition-colors duration-300 ${isRunning ? 'opacity-50 cursor-not-allowed ' : ''
+                            }${isConsumingPoints ? 'bg-purple-500' : 'bg-blue-500'
+                            }`}
                     >
-                        {isConsumingPoints ? 'Pontgyűjtő mód' : 'Pontfelhasználó mód'}
-                    </button>
+                        <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-transform duration-300 ${isConsumingPoints ? 'left-8' : 'left-1'
+                            }`} />
+                    </div>
+                    </div>
+                    <div className="flex items-center justify-center gap-2 my-4">
+                        <span className={`${!isConsumingPoints ? 'font-bold text-black' : 'text-gray-500'}`}>Pontgyűjtés</span>
+
+                        <span className={`${isConsumingPoints ? 'font-bold text-black' : 'text-gray-500'}`}>Felhasználás</span>
+                    </div>
 
                     < div className="mt-8 text-xl font-semibold text-black" >
-                        Összes csillag: {points.toFixed(0)}
+                        Összes csillag: {selectedPointObject?.points.toFixed(0)}
                     </div>
                 </div>
 
                 < div className="w-full max-w-2xl mt-8 bg-white rounded-lg shadow-lg p-4" >
-                    <div className="grid grid-cols-8 gap-1 justify-items-center">
-                        {Array.from({ length: 24 }).map((_, index) => {
-                            const row = Math.floor(index / 8);
-                            const position = row * 8 + (index % 8);
-                            
-                            if (position < fullStars) {
-                                return <FontAwesomeIcon key={index} icon={faStar} className="text-amber-400 text-lg" />;
-                            } else if (position === fullStars && partialStar > 0) {
-                                return (
-                                    <div key={index} className="relative inline-flex">
-                                        <FontAwesomeIcon icon={faStar} className="text-gray-400 text-lg" />
-                                        <FontAwesomeIcon
-                                            icon={faStar}
-                                            className="text-amber-400 text-lg absolute inset-0"
-                                            style={{ opacity: partialStar }}
-                                        />
-                                    </div>
-                                );
-                            } else if (position < Math.ceil(points)) {
-                                return <FontAwesomeIcon key={index} icon={faStar} className="text-gray-400 text-lg" />;
-                            }
-                            return null;
-                        })}
-                    </div>
+
+
+
+                    {!isRunning && (
+                        <div className="grid grid-cols-8 gap-1 justify-items-center">
+                            {[...Array(Math.floor(selectedPointObject?.points || 0))].map((_, i) => (
+                                <FontAwesomeIcon key={i} icon={faStar} className="text-red-400 text-lg" />
+                            ))}
+                        </div>
+                    )}
+
+                    {!isConsumingPoints && isRunning && (
+                        <div className="grid grid-cols-8 gap-1 justify-items-center">
+                            {[...Array(Math.floor(selectedPointObject?.points || 0))].map((_, i) => (
+                                <FontAwesomeIcon key={i} icon={faStar} className="text-red-400 text-lg" />
+                            ))}
+
+                            <FontAwesomeIcon icon={faStar} className={blinkingStarClass} />
+
+                        </div>
+                    )}
+
+                    {isConsumingPoints && isRunning && (
+                        <div className="grid grid-cols-8 gap-1 justify-items-center">
+                            {[...Array(Math.floor(selectedPointObject?.points || 0) - 1)].map((_, i) => (
+                                <FontAwesomeIcon key={i} icon={faStar} className="text-red-400 text-lg" />
+                            ))}
+
+                            <FontAwesomeIcon icon={faStar} className={blinkingStarClass} />
+
+                        </div>
+                    )}
+
+
+
+
+
+
                 </div>
             </main>
 
@@ -267,7 +406,7 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" >
                         <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full" >
                             {!isPinVerified ? (
-                                <div>
+                                <div className="flex flex-col gap-2">
                                     <h2 className="text-2xl font-bold mb-4" > PIN kód megadása </h2>
                                     < input
                                         type="password"
@@ -277,7 +416,7 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
                                         className="w-full p-2 border rounded mb-4"
                                         placeholder="Adja meg a PIN kódot"
                                     />
-                                    <div className="flex justify-end space-x-2" >
+                                    <div className="flex flex-row gap-2" >
                                         <button
                                             onClick={closeModal}
                                             className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
@@ -293,8 +432,68 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
                                     </div>
                                 </div>
                             ) : (
-                                <div>
-                                    <h2 className="text-2xl font-bold mb-4" > Pontok módosítása </h2>
+                                <div className="flex flex-col gap-2">
+                                    <h2 className="flex flex-row font-bold text-2xl text-black mb-2">
+                                        Gyerek kiválasztása
+                                    </h2>
+
+                                    <div className="flex flex-row gap-3">
+                                        <select
+                                            value={selectedPointObject?._id || ''}
+                                            onChange={(e) => {
+                                                const selectedId = e.target.value;
+                                                const selected = localPointObjects?.find((po) => po._id === selectedId);
+                                                setSelectedPointObject(selected);
+                                            }}
+                                            className="w-full p-2 border rounded text-black"
+                                        >
+                                            {localPointObjects?.map((pointObject) => (
+                                                <option key={pointObject._id} value={pointObject._id}>
+                                                    {pointObject.childid}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <button className="bg-blue-500 text-white p-1 rounded hover:bg-blue-600" onClick={() => handleDeletePointObject()}>Gyerek törlése </button>
+
+                                    </div>
+                                    <div className="flex flex-row gap-2">
+                                        <label className="block text-sm font-medium text-black mb-2">
+                                            Gyerek hozzáadása:
+                                        </label>
+                                        <form
+                                            className="flex flex-row gap-2"
+                                            onSubmit={(e) => {
+                                                e.preventDefault();
+                                                handleAddPointObject(newChildName);
+                                                setNewChildName('');
+                                            }}
+                                        >
+                                            <div className="flex flex-col">
+
+                                                <input
+                                                    type="text"
+                                                    value={newChildName}
+                                                    onChange={(e) => setNewChildName(e.target.value)}
+                                                    className="w-full p-2 border rounded text-black"
+                                                    placeholder="Gyerek neve"
+                                                />
+                                            </div>
+                                            <button
+                                                type="submit"
+                                                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                            >
+                                                Hozzáad
+                                            </button>
+                                        </form>
+
+
+                                    </div>
+
+                                    <div className="flex flex-col">
+
+
+                                    </div>
+                                    <h2 className="text-2xl font-bold text-gray-700 mb-4" > Pontok módosítása </h2>
                                     < div className="flex items-center space-x-4 mb-4" >
                                         <button
                                             onClick={() => handlePointsModification(-1)}
@@ -302,7 +501,7 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
                                         >
                                             -1
                                         </button>
-                                        < span className="text-xl font-bold" > {points} </span>
+                                        < span className="text-xl text-black font-bold" > {selectedPointObject?.points} </span>
                                         < button
                                             onClick={() => handlePointsModification(1)}
                                             className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
@@ -314,9 +513,11 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
                                         <input
                                             type="number"
                                             value={pointsToAdd}
-                                            onChange={(e) => setPointsToAdd(parseInt(e.target.value) || 0)}
-                                            className="w-24 p-2 border rounded"
-                                            min="0"
+                                            onChange={(e) => {
+                                                const value = parseInt(e.target.value, 10);
+                                                setPointsToAdd(isNaN(value) ? 0 : value);
+                                            }}
+                                            className="w-24 p-2 border rounded text-black"
                                         />
                                         <button
                                             onClick={() => handlePointsModification(pointsToAdd)}
@@ -325,9 +526,39 @@ function MainScreen({ pointObject }: { pointObject?: PointsType }) {
                                             Hozzáad
                                         </button>
                                     </div>
-                                    < button
+                                    <div className="mt-6 space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-black mb-2">
+                                                Másodperc / pont (gyűjtés)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={selectedPointObject?.secondstoaccumulate || 60}
+                                                onChange={(e) => setSelectedPointObject(prev => ({ ...prev, secondstoaccumulate: Math.max(1, parseInt(e.target.value) || 60) } as PointsType))}
+                                                className="w-full p-2 border rounded text-black"
+                                                min="1"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-black mb-2">
+                                                Másodperc / pont (felhasználás)
+                                            </label>
+                                            <input
+                                                type="number"
+                                                value={selectedPointObject?.secondstospend || 60}
+                                                onChange={(e) => setSelectedPointObject(prev => ({ ...prev, secondstospend: Math.max(1, parseInt(e.target.value) || 60) } as PointsType))}
+                                                className="w-full p-2 border rounded text-black"
+                                                min="1"
+                                            />
+                                        </div>
+                                    </div>
+
+
+
+
+                                    <button
                                         onClick={closeModal}
-                                        className="w-full px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                                        className="w-full px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 mt-4"
                                     >
                                         Bezárás
                                     </button>

@@ -5,12 +5,12 @@ export const dynamic = 'force-dynamic'
 
 const Home = async () => {
   const response = await PointsModel.find().sort({createdAt:-1});
-  const pointObject= JSON.parse(JSON.stringify(response));  
+  const pointObjects= JSON.parse(JSON.stringify(response));  
 
-  console.log("pointObject:", pointObject)
+  console.log("pointObject:", pointObjects)
 
   return (
-    <MainScreen pointObject={pointObject[0]} />
+    <MainScreen pointObjects={pointObjects} />
   )
 }
 
