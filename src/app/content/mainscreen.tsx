@@ -403,17 +403,18 @@ function MainScreen({ pointObjects = [] }: { pointObjects?: PointsType[] }) {
 
             {
                 isModalOpen && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" >
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center" >
                         <div className="bg-white p-8 rounded-lg shadow-xl max-w-md w-full" >
                             {!isPinVerified ? (
                                 <div className="flex flex-col gap-2">
-                                    <h2 className="text-2xl font-bold mb-4" > PIN kód megadása </h2>
+                                    <h2 className="text-2xl text-black font-bold mb-4" > PIN kód megadása </h2>
                                     < input
+                                    
                                         type="password"
                                         value={pin}
                                         onChange={(e) => setPin(e.target.value)
                                         }
-                                        className="w-full p-2 border rounded mb-4"
+                                        className="w-full p-2 border border-black text-black rounded mb-4"
                                         placeholder="Adja meg a PIN kódot"
                                     />
                                     <div className="flex flex-row gap-2" >
